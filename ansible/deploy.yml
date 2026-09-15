@@ -1,0 +1,13 @@
+---
+# Deploy (or update) the mbdeploy daemon on every fleet node.
+#
+#   ./build-bundles.sh            # once per mbdeploy/dependency change
+#   ansible-playbook deploy.yml   # all nodes
+#   ansible-playbook deploy.yml --limit zilch,nada
+#
+# The targets have no internet access, so everything installs from a
+# per-architecture wheel bundle built on this machine by build-bundles.sh.
+- name: Deploy mbdeploy daemon
+  hosts: mbdeploy_fleet
+  roles:
+    - mbdeploy

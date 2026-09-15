@@ -1,0 +1,100 @@
+---
+# Same naming as Raspberry Pi OS's own 010_pi-nopasswd. visudo validates the
+# file before it lands, so a bad line can't lock sudo out.
+- name: Grant passwordless sudo to {{ mbdeploy_sudo_user }}
+  when: mbdeploy_sudo_user | length > 0
+  become: true
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/010_{{ mbdeploy_sudo_user }}-nopasswd"
+    content: "{{ mbdeploy_sudo_user }} ALL=(ALL) NOPASSWD: ALL\n"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: /usr/sbin/visudo -cf %s
+
+- name: Check that a wheel bundle exists for this architecture
+  delegate_to: localhost
+  ansible.builtin.stat:
+    path: "{{ mbdeploy_bundle_dir }}"
+  register: bundle
+  failed_when: not bundle.stat.exists
+  changed_when: false
+
+- name: Create install and config directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ mbdeploy_home }}"
+    - "{{ mbdeploy_config | dirname }}"
+    - "{{ mbdeploy_wheels_dir }}"
+
+- name: Copy the wheel bundle
+  ansible.builtin.copy:
+    src: "{{ mbdeploy_bundle_dir }}/"
+    dest: "{{ mbdeploy_wheels_dir }}/"
+    mode: "0644"
+
+- name: Create the virtualenv
+  ansible.builtin.command:
+    cmd: "python3 -m venv {{ mbdeploy_venv }}"
+    creates: "{{ mbdeploy_venv }}/bin/pip"
+
+# pip is driven directly through the venv rather than via ansible.builtin.pip:
+# that module needs `packaging` in the target's SYSTEM python, which the
+# minimal images don't have and — with no internet on the fleet — can't get.
+# pip itself is naturally idempotent; "Installing collected" in its output is
+# what marks a task changed.
+#
+# armv6l only: zeroconf ships as an sdist, so the build toolchain must be in
+# the venv first, then zeroconf compiles on the target with isolation off
+# (so the toolchain we just installed is actually used).
+- name: Install build tools for the zeroconf compile (armv6l)
+  when: mbdeploy_compile_zeroconf
+  ansible.builtin.command:
+    cmd: >-
+      {{ mbdeploy_venv }}/bin/pip install --no-index
+      --find-links {{ mbdeploy_wheels_dir }}
+      Cython setuptools poetry-core wheel
+  register: pip_buildtools
+  changed_when: "'Installing collected' in pip_buildtools.stdout"
+
+- name: Compile zeroconf from sdist (armv6l — takes minutes on a Pi Zero)
+  when: mbdeploy_compile_zeroconf
+  ansible.builtin.command:
+    cmd: >-
+      {{ mbdeploy_venv }}/bin/pip install --no-index --no-build-isolation
+      --find-links {{ mbdeploy_wheels_dir }} zeroconf
+  register: pip_zeroconf
+  changed_when: "'Installing collected' in pip_zeroconf.stdout"
+
+- name: Install mbdeploy from the bundle
+  ansible.builtin.command:
+    cmd: >-
+      {{ mbdeploy_venv }}/bin/pip install --no-index --upgrade
+      --find-links {{ mbdeploy_wheels_dir }} mbdeploy
+  register: pip_mbdeploy
+  changed_when: "'Installing collected' in pip_mbdeploy.stdout"
+  notify: Restart mbdeploy
+
+- name: Install the systemd unit (mbdeploy renders its own)
+  become: true
+  ansible.builtin.command:
+    cmd: >-
+      {{ mbdeploy_venv }}/bin/mbdeploy serve --install-service --system
+      --config {{ mbdeploy_config }}
+    creates: /etc/systemd/system/mbdeploy.service
+
+- name: Enable and start the service
+  become: true
+  ansible.builtin.systemd_service:
+    name: mbdeploy
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Verify the daemon is active
+  ansible.builtin.command:
+    cmd: systemctl is-active mbdeploy
+  changed_when: false

@@ -1,0 +1,19 @@
+---
+# Account given passwordless sudo (/etc/sudoers.d). Set to "" to skip.
+mbdeploy_sudo_user: jtl
+
+# Install layout — identical on every node (documented on the internal wiki).
+mbdeploy_home: "/home/{{ ansible_user }}/mbdeploy"
+mbdeploy_venv: "{{ mbdeploy_home }}/.venv"
+mbdeploy_config: "{{ mbdeploy_home }}/config/devices.json"
+
+# Remote staging area for the offline wheel bundle.
+mbdeploy_wheels_dir: "/home/{{ ansible_user }}/wheels"
+
+# Where build-bundles.sh puts the per-arch bundles on the control machine.
+# ansible_architecture is aarch64 on the Pi 3/Zero 2, armv6l on the Pi Zero W.
+mbdeploy_bundle_dir: "{{ playbook_dir }}/bundles/{{ ansible_architecture }}"
+
+# armv6l has no prebuilt zeroconf wheel anywhere; it is carried as an sdist
+# and compiled on the target (a few minutes on a Pi Zero W, one time).
+mbdeploy_compile_zeroconf: "{{ ansible_architecture == 'armv6l' }}"

@@ -1,0 +1,31 @@
+# Example inventory for the mbdeploy fleet.
+#
+# Copy to inventory.local.yml and fill in your real hosts. The real file is
+# gitignored on purpose: this repository is public, and machine specifics
+# (hostnames, addresses, credentials) belong on the internal wiki, not here.
+#
+# Two auth styles are shown; use whichever each host actually has. Prefer SSH
+# keys. If a host only has password auth, either put ansible_ssh_pass /
+# ansible_become_pass in the (gitignored) local inventory, use ansible-vault,
+# or run ansible-playbook with --ask-pass --ask-become-pass.
+all:
+  vars:
+    ansible_user: pi
+    ansible_python_interpreter: /usr/bin/python3
+  children:
+    mbdeploy_fleet:
+      children:
+        # Nodes with key-based auth
+        cluster:
+          vars:
+            ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+          hosts:
+            node-a:
+            node-b:
+        # Nodes with password auth (needs sshpass on the control machine)
+        standalone:
+          vars:
+            ansible_ssh_pass: "CHANGE-ME"
+            ansible_become_pass: "CHANGE-ME"
+          hosts:
+            node-c:

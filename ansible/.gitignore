@@ -1,0 +1,4 @@
+# Real fleet inventory — the repo is public; machine specifics live on the internal wiki.
+inventory.local.yml
+# Build artifact from build-bundles.sh.
+bundles/

@@ -1,0 +1,4 @@
+# Site network settings — the repo is public.
+site.env
+# Card images carry the Wi-Fi password and a password hash; never commit them.
+*.img
